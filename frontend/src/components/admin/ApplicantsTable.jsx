@@ -14,6 +14,8 @@ const shortlistingStatus = ["Accepted", "Rejected"];
 const ApplicantsTable = () => {
     const { applicants } = useSelector(store => store.application);
 
+    console.log("applicants", applicants.applications[0]);
+
     const statusHandler = async (status, id) => {
         console.log('called');
         try {
@@ -58,6 +60,7 @@ const ApplicantsTable = () => {
                                 <TableCell>{item?.applicant?.email}</TableCell>
                                 <TableCell>{item?.applicant?.phoneNumber}</TableCell>
                                 <TableCell >
+
                                     {
                                         item.applicant?.profile?.resume ? <a className="text-blue-600 cursor-pointer" href={item?.applicant?.profile?.resume} target="_blank" rel="noopener noreferrer">{item?.applicant?.profile?.resumeOriginalName}</a> : <span>NA</span>
                                     }
@@ -65,18 +68,18 @@ const ApplicantsTable = () => {
                                 <TableCell>
                                     <div className="flex flex-col gap-1">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-sm font-medium">{item?.skillsMatchPercentage || 0}%</span>
+                                            <span className="text-sm font-medium">{item?.matchPercentage || 0}%</span>
                                         </div>
-                                        <Progress 
-                                            value={item?.skillsMatchPercentage || 0} 
-                                            className="h-2" 
-                                            indicatorClassName={getMatchColor(item?.skillsMatchPercentage || 0)}
+                                        <Progress
+                                            value={item?.matchPercentage || 0}
+                                            className="h-2"
+                                            indicatorClassName={getMatchColor(item?.matchPercentage || 0)}
                                         />
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <Badge className={`${getMatchColor(item?.skillsMatchPercentage || 0)} text-white`}>
-                                        {item?.skillsMatchPercentage >= 80 ? "High" : item?.skillsMatchPercentage >= 50 ? "Medium" : "Low"}
+                                    <Badge className={`${getMatchColor(item?.matchPercentage || 0)} text-white`}>
+                                        {item?.matchPercentage >= 80 ? "High" : item?.matchPercentage >= 50 ? "Medium" : "Low"}
                                     </Badge>
                                 </TableCell>
                                 <TableCell>{item?.applicant.createdAt.split("T")[0]}</TableCell>

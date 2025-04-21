@@ -1,7 +1,7 @@
 import { Application } from "../models/application.model.js";
 import { Job } from "../models/job.model.js";
 import { User } from "../models/user.model.js";
-
+import { spawn } from 'child_process';
 
 export const applyJob = async(req, res) => {
     try {
@@ -42,18 +42,96 @@ export const applyJob = async(req, res) => {
             });
         }
 
-        // create a new application
-        const newApplication = await Application.create({
-            job: jobId,
-            applicant: userId,
+
+        // check compatbility of resume with job skills
+
+        // get the skills of the job 
+
+        const jobSkills = job.skills;
+        console.log('Job skills:', jobSkills);
+
+        if (jobSkills.length === 0) {
+            console.log('No job skills found for job ID:', jobId);
+            return res.status(400).json({ message: 'No skills provided', success: false });
+        }
+
+        console.log('User resume path:', user.profile.resume);
+        console.log('Spawning Python process with skills:', jobSkills.join(','));
+
+        const pythonProcess = spawn('python', [
+            'controllers/resume_matcher.py',
+            user.profile.resume,
+            jobSkills.join(',')
+        ]);
+
+        console.log('Python process spawned');
+
+        let result = '';
+        let error = '';
+
+        pythonProcess.stdout.on('data', (data) => {
+            const dataStr = data.toString();
+            console.log('Python stdout:', dataStr);
+            result += dataStr;
         });
 
-        job.applications.push(newApplication._id);
-        await job.save();
-        return res.status(201).json({
-            message: "Job applied successfully.",
-            success: true
-        })
+        pythonProcess.stderr.on('data', (data) => {
+            const dataStr = data.toString();
+            console.log('Python stderr:', dataStr);
+            error += dataStr;
+        });
+
+        pythonProcess.on('close', async(code) => {
+            console.log('Python process exited with code:', code);
+            if (code !== 0 || error) {
+                console.error('Python script failed with error:', error);
+                return res.status(201).json({
+                    message: "Job applied successfully, but couldn't analyze resume compatibility.",
+                    success: true
+                });
+            }
+
+            try {
+                console.log('Raw result from Python:', result);
+                const parsedResult = JSON.parse(result);
+                console.log('Parsed result:', parsedResult);
+
+                // Create application with match percentage
+                const newApplication = await Application.create({
+                    job: jobId,
+                    applicant: userId,
+                    matchPercentage: parsedResult.matchPercentage || 0
+                });
+
+                job.applications.push(newApplication._id);
+                await job.save();
+
+                return res.status(201).json({
+                    message: "Job applied successfully.",
+                    matchPercentage: parsedResult.matchPercentage || 0,
+                    success: true
+                });
+            } catch (e) {
+                console.error('Failed to parse Python result:', e);
+
+                // Create application even if parsing fails
+                const newApplication = await Application.create({
+                    job: jobId,
+                    applicant: userId,
+                });
+
+                job.applications.push(newApplication._id);
+                await job.save();
+
+                return res.status(201).json({
+                    message: "Job applied successfully, but couldn't analyze resume compatibility.",
+                    success: true
+                });
+            }
+        });
+
+
+
     } catch (error) {
         console.log(error);
         return res.status(500).json({
@@ -109,31 +187,30 @@ export const getApplicants = async(req, res) => {
         };
 
         // Calculate skills match percentage for each applicant
-        const jobWithMatchPercentage = {
-            ...job.toObject(),
-            applications: job.applications.map(application => {
-                //
-                const applicantSkills = application.applicant?.profile?.skills || [];
-                const jobSkills = job.skills || [];
+        // const jobWithMatchPercentage = {
+        //     ...job.toObject(),
+        //     applications: job.applications.map(application => {
+        //         const applicantSkills = application.applicant?.profile?.skills || [];
+        //         const jobSkills = job.skills || [];
 
-                let matchPercentage = 0;
+        //         let matchPercentage = 0;
 
-                if (jobSkills.length > 0 && applicantSkills.length > 0) {
-                    const matchedSkills = applicantSkills.filter(skill =>
-                        jobSkills.includes(skill)
-                    );
-                    matchPercentage = (matchedSkills.length / jobSkills.length) * 100;
-                }
+        //         if (jobSkills.length > 0 && applicantSkills.length > 0) {
+        //             const matchedSkills = applicantSkills.filter(skill =>
+        //                 jobSkills.includes(skill)
+        //             );
+        //             matchPercentage = (matchedSkills.length / jobSkills.length) * 100;
+        //         }
 
-                return {
-                    ...application.toObject(),
-                    skillsMatchPercentage: parseFloat(matchPercentage.toFixed(2))
-                };
-            })
-        };
+        //         return {
+        //             ...application.toObject(),
+        //             skillsMatchPercentage: parseFloat(matchPercentage.toFixed(2))
+        //         };
+        //     })
+        // };
 
         return res.status(200).json({
-            job: jobWithMatchPercentage,
+            job: job,
             success: true
         });
     } catch (error) {
